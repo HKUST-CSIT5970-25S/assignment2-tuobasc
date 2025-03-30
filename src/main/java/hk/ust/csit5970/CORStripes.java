@@ -36,6 +36,7 @@ public class CORStripes extends Configured implements Tool {
 		@Override
 		public void map(LongWritable key, Text value, Context context)
 				throws IOException, InterruptedException {
+
 			HashMap<String, Integer> word_set = new HashMap<String, Integer>();
 			// Please use this tokenizer! DO NOT implement a tokenizer by yourself!
 			String clean_doc = value.toString().replaceAll("[^a-z A-Z]", " ");
@@ -43,6 +44,18 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+
+			while (doc_tokenizer.hasMoreTokens()) {
+                String word = doc_tokenizer.nextToken().toLowerCase();
+                if (word_set.containsKey(word)) {
+                    word_set.put(word, word_set.get(word) + 1);
+                } else {
+                    word_set.put(word, 1);
+                }
+            }
+            for (Map.Entry<String, Integer> entry : word_set.entrySet()) {
+                context.write(new Text(entry.getKey()), new IntWritable(entry.getValue()));
+            }
 		}
 	}
 
@@ -56,6 +69,11 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int sum = 0;
+            for (IntWritable val : values) {
+                sum += val.get();
+            }
+            context.write(key, new IntWritable(sum));
 		}
 	}
 
@@ -75,6 +93,27 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			for (String a : sorted_word_set) {
+                MapWritable stripe = new MapWritable();
+
+                for (String b : sorted_word_set) {
+                    if (a.compareTo(b) < 0) {
+
+                        Text bText = new Text(b);
+                        // map a and b
+                        if (stripe.containsKey(bText)) {
+                            IntWritable count = (IntWritable) stripe.get(bText);
+                            count.set(count.get() + 1);
+                        } else {
+                            stripe.put(bText, new IntWritable(1));
+                        }
+                    }
+                }
+                // output
+                if (!stripe.isEmpty()) {
+                    context.write(new Text(a), stripe);
+                }
+            }
 		}
 	}
 
@@ -89,6 +128,22 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			MapWritable combined = new MapWritable();
+            // combine and count
+            for (MapWritable stripe : values) {
+                for (Map.Entry<Writable, Writable> entry : stripe.entrySet()) {
+                    Text neighbor = (Text) entry.getKey();
+                    IntWritable count = (IntWritable) entry.getValue();
+                    if (combined.containsKey(neighbor)) {
+                        IntWritable existing = (IntWritable) combined.get(neighbor);
+                        existing.set(existing.get() + count.get());
+                    } else {
+                        combined.put(neighbor, new IntWritable(count.get()));
+                    }
+                }
+            }
+            // output
+            context.write(key, combined);
 		}
 	}
 
@@ -142,6 +197,40 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			MapWritable combined = new MapWritable();
+            for (MapWritable stripe : values) {
+                for (Map.Entry<Writable, Writable> entry : stripe.entrySet()) {
+                    Text neighbor = (Text) entry.getKey();
+                    IntWritable count = (IntWritable) entry.getValue();
+                    if (combined.containsKey(neighbor)) {
+                        IntWritable existing = (IntWritable) combined.get(neighbor);
+                        existing.set(existing.get() + count.get());
+                    } else {
+                        combined.put(new Text(neighbor.toString()), new IntWritable(count.get()));
+                    }
+                }
+            }
+            // word A
+            String A = key.toString();
+            Integer freqA = word_total_map.get(A);
+            if (freqA == null) {
+                return;
+            }
+            // calculate corr
+            for (Map.Entry<Writable, Writable> entry : combined.entrySet()) {
+                Text bText = (Text) entry.getKey();
+                String B = bText.toString();
+                Integer freqB = word_total_map.get(B);
+                if (freqB == null) {
+                    continue;
+                }
+                int pairCount = ((IntWritable) entry.getValue()).get();
+                // calculate COR(A,B) = Freq(A,B) / (Freq(A) * Freq(B))
+                double correlation = (double) pairCount / (freqA * freqB);
+                PairOfStrings outputPair = new PairOfStrings(A, B);
+                // output corr
+                context.write(outputPair, new DoubleWritable(correlation));
+            }
 		}
 	}
 

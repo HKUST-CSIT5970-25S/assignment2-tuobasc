@@ -53,6 +53,21 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+
+            while (doc_tokenizer.hasMoreTokens()) {
+                String word = doc_tokenizer.nextToken().toLowerCase();
+                // accumulate
+                if (word_set.containsKey(word)) {
+                    word_set.put(word, word_set.get(word) + 1);
+                } else {
+                    word_set.put(word, 1);
+                }
+            }
+
+            // output word and the count
+            for (Map.Entry<String, Integer> entry : word_set.entrySet()) {
+                context.write(new Text(entry.getKey()), new IntWritable(entry.getValue()));
+            }
 		}
 	}
 
@@ -66,6 +81,12 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int sum = 0;
+            for (IntWritable val : values) {
+                sum += val.get();
+            }
+            // output the word and count
+            context.write(key, new IntWritable(sum));
 		}
 	}
 
@@ -81,6 +102,22 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			String clean_text = value.toString().replaceAll("[^a-z A-Z]", " ");
+
+			Set<String> uniqueWords = new HashSet<String>();
+            while (doc_tokenizer.hasMoreTokens()) {
+                uniqueWords.add(doc_tokenizer.nextToken());
+            }
+            List<String> wordList = new ArrayList<String>(uniqueWords);
+            Collections.sort(wordList);
+
+            // output the pair(A, B)
+            for (int i = 0; i < wordList.size(); i++) {
+                for (int j = i + 1; j < wordList.size(); j++) {
+                    PairOfStrings pair = new PairOfStrings(wordList.get(i), wordList.get(j));
+                    context.write(pair, new IntWritable(1));
+                }
+            }
 		}
 	}
 
@@ -93,6 +130,12 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int sum = 0;
+            for (IntWritable val : values) {
+                sum += val.get();
+            }
+            // calculate pair(A, B) count
+            context.write(key, new IntWritable(sum));
 		}
 	}
 
@@ -145,6 +188,25 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			// calculate final count of A, B
+			int pairCount = 0;
+            for (IntWritable val : values) {
+                pairCount += val.get();
+            }
+            // get A and B count
+            String A = key.getLeftElement();
+            String B = key.getRightElement();
+            Integer freqA = word_total_map.get(A);
+            Integer freqB = word_total_map.get(B);
+
+            if (freqA == null || freqB == null) {
+                return;
+            }
+
+
+            // calculate：COR(A,B) = Freq(A,B) / (Freq(A)*Freq(B))
+            double correlation = (double) pairCount / (freqA * freqB);
+            context.write(key, new DoubleWritable(correlation));
 		}
 	}
 

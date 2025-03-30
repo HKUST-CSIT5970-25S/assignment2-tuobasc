@@ -1,5 +1,5 @@
 package hk.ust.csit5970;
-
+import java.util.HashMap;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Map;
@@ -54,6 +54,27 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+            // save stripe
+            HashMap<String, HashMapStringIntWritable> stripeMap = new HashMap<String, HashMapStringIntWritable>();
+
+            // construct stripe
+            for (int i = 0; i < words.length - 1; i++) {
+                String left = words[i];
+                String right = words[i + 1];
+
+                // new stripe
+                if (!stripeMap.containsKey(left)) {
+                    stripeMap.put(left, new HashMapStringIntWritable());
+                }
+                // count ++
+                stripeMap.get(left).increment(right, 1);
+            }
+
+            // output the count
+            for (Map.Entry<String, HashMapStringIntWritable> entry : stripeMap.entrySet()) {
+                KEY.set(entry.getKey());
+                context.write(KEY, entry.getValue());
+            }
 		}
 	}
 
@@ -75,6 +96,33 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			SUM_STRIPES.clear();
+
+            // accumulate all stripes
+            for (HashMapStringIntWritable stripe : stripes) {
+                SUM_STRIPES.plus(stripe);
+            }
+
+            //
+            int totalCount = 0;
+            for (Map.Entry<String, Integer> entry : SUM_STRIPES.entrySet()) {
+                totalCount += entry.getValue(); // 直接累加 Integer 数值
+            }
+
+            // output totalCount
+            BIGRAM.set(key.toString(), "");
+            FREQ.set((float) totalCount);
+            context.write(BIGRAM, FREQ);
+
+            // calculate frequency
+            for (Map.Entry<String, Integer> entry : SUM_STRIPES.entrySet()) {
+                String right = entry.getKey();
+                int count = entry.getValue();
+                float relativeFrequency = (float) count / totalCount;
+                BIGRAM.set(key.toString(), right);
+                FREQ.set(relativeFrequency);
+                context.write(BIGRAM, FREQ);
+            }
 		}
 	}
 
@@ -94,6 +142,14 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			SUM_STRIPES.clear();
+
+            // combine all stripes
+			for (HashMapStringIntWritable stripe : stripes) {
+                SUM_STRIPES.plus(stripe);
+            }
+
+            context.write(key, (HashMapStringIntWritable) SUM_STRIPES.clone());
 		}
 	}
 

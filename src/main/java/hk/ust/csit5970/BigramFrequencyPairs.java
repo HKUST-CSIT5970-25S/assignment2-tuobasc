@@ -48,11 +48,25 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 		public void map(LongWritable key, Text value, Context context)
 				throws IOException, InterruptedException {
 			String line = ((Text) value).toString();
+			// line = line.replaceAll("[^a-zA-Z0-9\\s]", ""); // don't know whether to remove
 			String[] words = line.trim().split("\\s+");
 			
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+
+            for (int i = 0; i < words.length - 1; i++) {
+                String w1 = words[i];
+                String w2 = words[i + 1];
+
+                // output (w1, w2) -> 1
+                BIGRAM.set(w1, w2);
+                context.write(BIGRAM, ONE);
+
+                // word count (w1, *) -> 1
+                BIGRAM.set(w1, "*");
+                context.write(BIGRAM, ONE);
+            }
 		}
 	}
 
@@ -64,6 +78,8 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 
 		// Reuse objects.
 		private final static FloatWritable VALUE = new FloatWritable();
+		private String currentLeftWord = null;
+        private int currentTotalCount = 0;
 
 		@Override
 		public void reduce(PairOfStrings key, Iterable<IntWritable> values,
@@ -71,6 +87,35 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			// check left word, update when new word
+            if (!key.getLeftElement().equals(currentLeftWord)) {
+                currentLeftWord = key.getLeftElement();
+                currentTotalCount = 0;
+            }
+
+            // calculate the count of every key, (a, b) -> 1 + (a,b) -> 2,
+            int sum = 0;
+            for (IntWritable val : values) {
+                sum += val.get();
+            }
+
+            // Maybe the single word
+            if (key.getRightElement().equals("*")) {
+                currentTotalCount = sum;
+                // output the single word count
+                PairOfStrings outputKey = new PairOfStrings();
+                outputKey.set(currentLeftWord, "");
+                VALUE.set((float) currentTotalCount);
+                context.write(outputKey, VALUE);
+            } else {
+                // calculate count(A, B) / count(A, *)
+                if (currentTotalCount != 0) {
+                    float relativeFrequency = (float) sum / currentTotalCount;
+                    VALUE.set(relativeFrequency);
+                    // output the frequency
+                    context.write(key, VALUE);
+                }
+            }
 		}
 	}
 	
@@ -84,6 +129,13 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+		    int sum = 0;
+            // accumulate the values
+            for (IntWritable val : values) {
+                sum += val.get();
+            }
+            SUM.set(sum);
+            context.write(key, SUM);
 		}
 	}
 
